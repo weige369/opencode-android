@@ -11,10 +11,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import com.opencode.android.engine.OpenCodeManager
 import com.opencode.android.service.OpenCodeRuntimeService
+import com.opencode.android.ui.bootstrap.BootstrapScreen
 import com.opencode.android.ui.chat.ChatScreen
 import com.opencode.android.ui.theme.OpenCodeTheme
 import com.opencode.android.util.PreferencesManager
@@ -22,7 +26,7 @@ import com.opencode.android.util.PreferencesManager
 /**
  * 主 Activity
  *
- * 启动时自动启动 OpenCode 运行时服务，展示聊天界面。
+ * 启动时自动启动 OpenCode 运行时服务，管理聊天/安装导航。
  */
 class MainActivity : ComponentActivity() {
 
@@ -34,7 +38,7 @@ class MainActivity : ComponentActivity() {
         } else {
             Toast.makeText(
                 this,
-                "Notification permission is required for foreground service",
+                "需通知权限以保持后台服务运行",
                 Toast.LENGTH_LONG,
             ).show()
         }
@@ -49,14 +53,25 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    ChatScreen(
-                        onNavigateToSettings = {
-                            // TODO: 导航到设置页面
-                        },
-                        onNavigateToSessions = {
-                            // TODO: 导航到会话列表
-                        },
-                    )
+                    var currentScreen by remember { mutableStateOf("chat") }
+
+                    when (currentScreen) {
+                        "bootstrap" -> BootstrapScreen(
+                            onBack = { currentScreen = "chat" },
+                            onInstallComplete = { currentScreen = "chat" },
+                        )
+                        else -> ChatScreen(
+                            onNavigateToSettings = {
+                                // TODO: 导航到设置页面
+                            },
+                            onNavigateToSessions = {
+                                // TODO: 导航到会话列表
+                            },
+                            onNavigateToBootstrap = {
+                                currentScreen = "bootstrap"
+                            },
+                        )
+                    }
                 }
             }
         }

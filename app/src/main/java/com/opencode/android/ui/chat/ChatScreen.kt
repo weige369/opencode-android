@@ -33,6 +33,7 @@ fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
     onNavigateToSettings: () -> Unit = {},
     onNavigateToSessions: () -> Unit = {},
+    onNavigateToBootstrap: () -> Unit = {},
 ) {
     val sessions by viewModel.sessions.collectAsStateWithLifecycle()
     val currentSession by viewModel.currentSession.collectAsStateWithLifecycle()
@@ -217,6 +218,14 @@ fun ChatScreen(
                                 },
                             ) {
                                 Text("启动 OpenCode 服务")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = onNavigateToBootstrap,
+                            ) {
+                                Icon(Icons.Filled.Terminal, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("一键安装环境 (Termux + opencode)")
                             }
                         }
                         if (runtimeState == RuntimeState.STARTING) {
