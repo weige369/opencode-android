@@ -1,7 +1,6 @@
 package com.opencode.android.ui.chat
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,8 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,14 +22,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.opencode.android.data.model.Message
 import com.opencode.android.data.model.Part
 import com.opencode.android.engine.OpenCodeManager.RuntimeState
+import com.opencode.android.service.OpenCodeRuntimeService
 
 /**
- * 主聊天界面
- *
- * 借鉴 coulious/opencode-android 的 ChatScreen 设计：
- * - 工具调用折叠卡片
- * - Markdown 渲染（简化版）
- * - 消息分页加载
+ * 主聊天界面 — 中文版
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,17 +42,16 @@ fun ChatScreen(
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val serverVersion by viewModel.serverVersion.collectAsStateWithLifecycle()
 
+    val context = LocalContext.current
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
 
-    // 自动滚动到底部
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
     }
 
-    // 首次加载
     LaunchedEffect(Unit) {
         viewModel.loadSessions()
     }
@@ -72,31 +66,26 @@ fun ChatScreen(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium,
                         )
-                        // 状态指示器
                         val (statusText, statusColor) = when (runtimeState) {
                             RuntimeState.RUNNING -> {
                                 val v = serverVersion
-                                if (v != null) "● Running (v$v)" to Color(0xFF4CAF50)
-                                else "● Running" to Color(0xFF4CAF50)
+                                if (v != null) "● 运行中 (v$v)" to Color(0xFF4CAF50)
+                                else "● 运行中" to Color(0xFF4CAF50)
                             }
-                            RuntimeState.STARTING -> "◌ Starting..." to Color(0xFFFFC107)
-                            RuntimeState.STOPPING -> "◌ Stopping..." to Color(0xFFFFC107)
-                            RuntimeState.ERROR -> "✕ Error" to Color(0xFFFF5252)
-                            RuntimeState.STOPPED -> "○ Stopped" to Color(0xFF9E9E9E)
+                            RuntimeState.STARTING -> "◌ 启动中…" to Color(0xFFFFC107)
+                            RuntimeState.STOPPING -> "◌ 停止中…" to Color(0xFFFFC107)
+                            RuntimeState.ERROR -> "✕ 错误" to Color(0xFFFF5252)
+                            RuntimeState.STOPPED -> "○ 已停止" to Color(0xFF9E9E9E)
                         }
-                        Text(
-                            text = statusText,
-                            fontSize = 11.sp,
-                            color = statusColor,
-                        )
+                        Text(text = statusText, fontSize = 11.sp, color = statusColor)
                     }
                 },
                 actions = {
                     IconButton(onClick = onNavigateToSessions) {
-                        Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Sessions")
+                        Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "会话列表")
                     }
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        Icon(Icons.Filled.Settings, contentDescription = "设置")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -105,11 +94,7 @@ fun ChatScreen(
             )
         },
         bottomBar = {
-            // 输入栏
-            Surface(
-                tonalElevation = 3.dp,
-                shadowElevation = 8.dp,
-            ) {
+            Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -120,7 +105,7 @@ fun ChatScreen(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask OpenCode anything...") },
+                        placeholder = { Text("向 OpenCode 提问…") },
                         maxLines = 5,
                         shape = RoundedCornerShape(24.dp),
                         enabled = currentSession != null && runtimeState == RuntimeState.RUNNING,
@@ -131,11 +116,7 @@ fun ChatScreen(
                             onClick = { viewModel.abortCurrentMessage() },
                             modifier = Modifier.size(48.dp),
                         ) {
-                            Icon(
-                                Icons.Filled.Stop,
-                                contentDescription = "Stop",
-                                tint = MaterialTheme.colorScheme.error,
-                            )
+                            Icon(Icons.Filled.Stop, contentDescription = "停止", tint = MaterialTheme.colorScheme.error)
                         }
                     } else {
                         IconButton(
@@ -148,10 +129,7 @@ fun ChatScreen(
                             modifier = Modifier.size(48.dp),
                             enabled = inputText.isNotBlank() && runtimeState == RuntimeState.RUNNING,
                         ) {
-                            Icon(
-                                Icons.Filled.Send,
-                                contentDescription = "Send",
-                            )
+                            Icon(Icons.Filled.Send, contentDescription = "发送")
                         }
                     }
                 }
@@ -159,30 +137,22 @@ fun ChatScreen(
         },
     ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
         ) {
-            // 错误提示
             error?.let { err ->
                 Snackbar(
                     modifier = Modifier.padding(8.dp),
                     action = {
                         TextButton(onClick = { viewModel.clearError() }) {
-                            Text("Dismiss")
+                            Text("关闭")
                         }
                     },
-                ) {
-                    Text(err)
-                }
+                ) { Text(err) }
             }
 
             if (currentSession == null && runtimeState == RuntimeState.RUNNING) {
-                // 无会话状态
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
+                // 无会话
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             Icons.Filled.AddCircleOutline,
@@ -191,39 +161,49 @@ fun ChatScreen(
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            "Create a new session to start",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        )
+                        Text("创建新会话以开始", style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                         Spacer(modifier = Modifier.height(16.dp))
                         FilledTonalButton(onClick = { viewModel.createNewSession() }) {
-                            Text("New Session")
+                            Text("新建会话")
                         }
                     }
                 }
             } else if (runtimeState != RuntimeState.RUNNING) {
-                // 服务未运行
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
+                // 服务未运行 — 显示启动按钮而非无限转圈
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(48.dp),
-                            strokeWidth = 3.dp,
+                        Icon(
+                            Icons.Filled.PowerSettingsNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             when (runtimeState) {
-                                RuntimeState.STARTING -> "Starting OpenCode Server..."
-                                RuntimeState.STOPPED -> "Server stopped"
-                                RuntimeState.ERROR -> "Server error - check settings"
-                                else -> "Waiting for server..."
+                                RuntimeState.STARTING -> "正在启动 OpenCode 服务…"
+                                RuntimeState.STOPPED -> "服务未运行"
+                                RuntimeState.ERROR -> "服务异常 — 请检查设置"
+                                else -> "等待服务…"
                             },
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (runtimeState == RuntimeState.STOPPED || runtimeState == RuntimeState.ERROR) {
+                            Button(
+                                onClick = {
+                                    OpenCodeRuntimeService.start(context)
+                                },
+                            ) {
+                                Text("启动 OpenCode 服务")
+                            }
+                        }
+                        if (runtimeState == RuntimeState.STARTING) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp), strokeWidth = 2.dp)
+                        }
                     }
                 }
             } else {
@@ -243,9 +223,6 @@ fun ChatScreen(
     }
 }
 
-/**
- * 单条消息卡片
- */
 @Composable
 fun MessageCard(message: Message) {
     val role = message.info?.role ?: "user"
@@ -256,11 +233,10 @@ fun MessageCard(message: Message) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
     ) {
-        // Role label
         Text(
             text = when {
-                hasError -> "Error"
-                isUser -> "You"
+                hasError -> "错误"
+                isUser -> "你"
                 else -> message.info?.agent?.ifBlank { "OpenCode" } ?: "OpenCode"
             },
             fontSize = 11.sp,
@@ -269,16 +245,10 @@ fun MessageCard(message: Message) {
                     else MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
         )
-
-        // 消息 parts
-        message.parts.forEach { part ->
-            PartCard(part = part, isUser = isUser)
-        }
-
-        // 错误信息
+        message.parts.forEach { part -> PartCard(part = part, isUser = isUser) }
         if (hasError) {
             Text(
-                text = message.info?.error?.data?.message ?: "Unknown error",
+                text = message.info?.error?.data?.message ?: "未知错误",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -287,9 +257,6 @@ fun MessageCard(message: Message) {
     }
 }
 
-/**
- * 单个 Part 渲染
- */
 @Composable
 fun PartCard(part: Part, isUser: Boolean) {
     when (part.type) {
@@ -297,8 +264,7 @@ fun PartCard(part: Part, isUser: Boolean) {
             val text = part.text ?: return
             Surface(
                 shape = RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
+                    topStart = 16.dp, topEnd = 16.dp,
                     bottomStart = if (isUser) 16.dp else 4.dp,
                     bottomEnd = if (isUser) 4.dp else 16.dp,
                 ),
@@ -315,37 +281,27 @@ fun PartCard(part: Part, isUser: Boolean) {
                 )
             }
         }
-
         "tool" -> {
             val state = part.state ?: return
             val isExpanded = remember { mutableStateOf(false) }
-
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
-                modifier = Modifier
-                    .widthIn(max = 320.dp)
-                    .padding(vertical = 2.dp),
+                modifier = Modifier.widthIn(max = 320.dp).padding(vertical = 2.dp),
                 onClick = { isExpanded.value = !isExpanded.value },
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // 工具状态图标
                         val (icon, tint) = when (state.status) {
                             "running" -> Icons.Filled.PlayArrow to Color(0xFF2196F3)
                             "completed" -> Icons.Filled.CheckCircle to Color(0xFF4CAF50)
                             "error" -> Icons.Filled.Error to Color(0xFFFF5252)
                             else -> Icons.Filled.HourglassEmpty to Color(0xFF9E9E9E)
                         }
-                        Icon(
-                            icon,
-                            contentDescription = state.status,
-                            modifier = Modifier.size(16.dp),
-                            tint = tint,
-                        )
+                        Icon(icon, state.status, modifier = Modifier.size(16.dp), tint = tint)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = state.title ?: part.tool ?: "Tool",
+                            text = state.title ?: part.tool ?: "工具",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -353,57 +309,33 @@ fun PartCard(part: Part, isUser: Boolean) {
                         Spacer(modifier = Modifier.weight(1f))
                         Icon(
                             if (isExpanded.value) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                            contentDescription = "Toggle",
+                            contentDescription = "展开/收起",
                             modifier = Modifier.size(16.dp),
                         )
                     }
-
-                    // 展开时显示详情
                     AnimatedVisibility(visible = isExpanded.value) {
                         Column(modifier = Modifier.padding(top = 8.dp)) {
                             if (state.input != null) {
-                                Text(
-                                    text = "Input:",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                )
-                                Text(
-                                    text = state.input.toString(),
-                                    fontSize = 11.sp,
+                                Text("输入：", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                Text(state.input.toString(), fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 8.dp),
-                                )
+                                    modifier = Modifier.padding(start = 8.dp))
                             }
                             if (!state.output.isNullOrBlank()) {
-                                Text(
-                                    text = "Output:",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                )
-                                Text(
-                                    text = state.output,
-                                    fontSize = 11.sp,
+                                Text("输出：", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                Text(state.output, fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 8.dp),
-                                )
+                                    modifier = Modifier.padding(start = 8.dp))
                             }
                             if (!state.error.isNullOrBlank()) {
-                                Text(
-                                    text = state.error,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
+                                Text(state.error, fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
                 }
             }
-        }
-
-        else -> {
-            // 未知 part type，忽略或显示原始内容
         }
     }
 }

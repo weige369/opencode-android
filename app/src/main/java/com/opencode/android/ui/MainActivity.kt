@@ -61,8 +61,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 自动启动运行时（如设置启用）
+        // 默认启动运行时服务（除非用户在设置中关闭）
         if (PreferencesManager.isAutoStart(this)) {
+            requestNotificationPermissionAndStart()
+        } else {
+            // 即使 autoStart=false，也启动服务——autoStart 仅控制开机自启
             requestNotificationPermissionAndStart()
         }
     }
