@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.opencode.android.bridge.OpenCodeApiClient
 import com.opencode.android.data.model.*
 import com.opencode.android.engine.OpenCodeManager
+import com.opencode.android.engine.NodeRuntime
 import com.opencode.android.util.PreferencesManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,7 +51,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val providers: StateFlow<List<Provider>> = _providers.asStateFlow()
 
     /** 当 opencode 未安装时，Mock 模式为 true */
-    private val _isMockMode = MutableStateFlow(!OpenCodeManager.isBinaryAvailable)
+    private val _isMockMode = MutableStateFlow(
+        !OpenCodeManager.isBinaryAvailable && !NodeRuntime.isOpenCodeReady(context)
+    )
     val isMockMode: StateFlow<Boolean> = _isMockMode.asStateFlow()
 
     private var apiClient: OpenCodeApiClient? = null
@@ -233,12 +236,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 parts = listOf(Part(
                     id = "p1", type = "text",
                     text = "👋 欢迎使用 OpenCode Android！\n\n" +
-                        "当前为 **Mock 离线模式**，因为未检测到 opencode 二进制文件。\n\n" +
-                        "你可以在此模式下体验 UI 交互，但 AI 功能需要安装 opencode 后才能使用。\n\n" +
-                        "📦 **安装步骤：**\n" +
-                        "1. 安装 [Termux](https://f-droid.org/packages/com.termux/)\n" +
-                        "2. 在 Termux 中安装 opencode-termux deb 包\n" +
-                        "3. 返回本应用，点击「设置 → 启动服务」"
+                        "当前为 **Mock 离线模式**，因为未检测到 OpenCode 运行环境。\n\n" +
+                        "你可以在此模式下体验 UI 交互，但 AI 功能需要安装后才能使用。\n\n" +
+                        "📦 **点击右下角「一键安装环境」按钮**即可自动完成所有安装。"
                 )),
             ),
         )

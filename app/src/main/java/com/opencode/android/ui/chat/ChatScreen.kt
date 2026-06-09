@@ -101,11 +101,18 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onNavigateToSessions) {
-                        Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "会话列表")
-                    }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "设置")
+                    if (isMockMode) {
+                        // Mock 模式：把设置按钮变成安装按钮
+                        IconButton(onClick = onNavigateToBootstrap) {
+                            Icon(Icons.Filled.Downloading, contentDescription = "一键安装环境")
+                        }
+                    } else {
+                        IconButton(onClick = onNavigateToSessions) {
+                            Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "会话列表")
+                        }
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = "设置")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

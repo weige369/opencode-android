@@ -17,31 +17,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import com.opencode.android.engine.NodeRuntime
+import com.opencode.android.engine.OpenCodeManager
 import com.opencode.android.service.OpenCodeRuntimeService
-import com.opencode.android.ui.bootstrap.BootstrapScreen
 import com.opencode.android.ui.chat.ChatScreen
+import com.opencode.android.ui.installer.InstallerScreen
 import com.opencode.android.ui.theme.OpenCodeTheme
 import com.opencode.android.util.PreferencesManager
 
 /**
  * 主 Activity
- *
- * 启动时自动启动 OpenCode 运行时服务，管理聊天/安装导航。
+ * 
+ * 首次启动 → 安装引导页 → 安装完成 → 聊天页
+ * 后续启动 → 直接进入聊天页
  */
 class MainActivity : ComponentActivity() {
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            startRuntime()
-        } else {
-            Toast.makeText(
-                this,
-                "需通知权限以保持后台服务运行",
-                Toast.LENGTH_LONG,
-            ).show()
-        }
+        if (granted) startRuntime()
+        else Toast.makeText(this, "需通知权限以保持后台服务运行", Toast.LENGTH_LONG).show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,30 +49,33 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    var currentScreen by remember { mutableStateOf("chat") }
+                    // 判断是否需要安装
+                    val needsSetup = remember {
+                        !NodeRuntime.isOpenCodeReady(this@MainActivity) &&
+                        !OpenCodeManager.isBinaryAvailable
+                    }
 
-                    when (currentScreen) {
-                        "bootstrap" -> BootstrapScreen(
-                            onBack = { currentScreen = "chat" },
-                            onInstallComplete = { currentScreen = "chat" },
+                    var screen by remember { mutableStateOf(if (needsSetup) "installer" else "chat") }
+
+                    when (screen) {
+                        "installer" -> InstallerScreen(
+                            onComplete = {
+                                screen = "chat"
+                            },
+                            onSkip = {
+                                screen = "chat"
+                            },
                         )
                         else -> ChatScreen(
-                            onNavigateToSettings = {
-                                // TODO: 导航到设置页面
-                            },
-                            onNavigateToSessions = {
-                                // TODO: 导航到会话列表
-                            },
-                            onNavigateToBootstrap = {
-                                currentScreen = "bootstrap"
-                            },
+                            onNavigateToSettings = { /* TODO */ },
+                            onNavigateToSessions = { /* TODO */ },
+                            onNavigateToBootstrap = { screen = "installer" },
                         )
                     }
                 }
             }
         }
 
-        // 默认启动运行时服务
         requestNotificationPermissionAndStart()
     }
 
@@ -97,17 +96,6 @@ class MainActivity : ComponentActivity() {
         val port = PreferencesManager.getServerPort(this)
         val password = PreferencesManager.getServerPassword(this)
         val workDir = PreferencesManager.getDefaultWorkDir(this)
-
-        OpenCodeRuntimeService.start(
-            context = this,
-            port = port,
-            password = password,
-            workDir = workDir,
-        )
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Note: 不在这里停止服务，保持后台运行
+        OpenCodeRuntimeService.start(this, port, password, workDir)
     }
 }

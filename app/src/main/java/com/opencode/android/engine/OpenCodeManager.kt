@@ -203,12 +203,16 @@ object OpenCodeManager {
      */
     private fun findOpenCodeBinary(): String? {
         val candidates = listOf(
-            "/usr/bin/opencode",
-            "/usr/local/bin/opencode",
+            // 内置 Node.js 安装的 opencode (最高优先级)
+            "/data/data/com.opencode.android/files/node/bin/opencode",
+            "/data/data/com.opencode.android/files/node/lib/node_modules/@anthropic-ai/opencode/dist/cli.mjs",
+            // Termux
             "/data/data/com.termux/files/usr/bin/opencode",
             "/data/data/com.termux/files/usr/glibc/bin/opencode",
+            // 系统路径
+            "/usr/bin/opencode",
+            "/usr/local/bin/opencode",
             System.getenv("HOME")?.let { "$it/.local/bin/opencode" },
-            "/usr/lib/node_modules/opencode/dist/cli.mjs",
         )
 
         for (path in candidates) {
