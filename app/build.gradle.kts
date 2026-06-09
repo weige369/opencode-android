@@ -87,6 +87,10 @@ dependencies {
     // Security
     implementation(libs.androidx.security.crypto)
 
+    // Archive extraction
+    implementation(libs.commons.compress)
+    implementation(libs.xz)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
