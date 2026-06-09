@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
-import org.tukaani.xz.XZInputStream
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -171,9 +170,9 @@ object OpenCodeInstaller {
             }
 
             if (name == "data.tar.xz") {
-                // 找到 data.tar.xz，在其中提取 usr/bin/opencode
+                // 找到 data.tar.xz，搜索其中的 opencode 二进制
                 val xzData = data.copyOfRange(pos, (pos + size).toInt())
-                extractFromTarXz(xzData, "usr/bin/opencode", destBin)
+                extractFromTarXz(xzData, destBin)
                 return
             }
 
@@ -184,27 +183,33 @@ object OpenCodeInstaller {
         throw IOException("data.tar.xz not found in deb")
     }
 
-    private fun extractFromTarXz(xzData: ByteArray, targetPath: String, dest: File) {
+    private fun extractFromTarXz(xzData: ByteArray, dest: File) {
         org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
             XZCompressorInputStream(ByteArrayInputStream(xzData))
         ).use { tarIn ->
+            val candidates = mutableListOf<String>()
             var entry = tarIn.nextEntry
             while (entry != null) {
                 val name = entry.name.removePrefix("./").trimStart('/')
-                if (name == targetPath) {
-                    FileOutputStream(dest).use { fos ->
-                        val buf = ByteArray(8192)
-                        var n: Int
-                        while (tarIn.read(buf).also { n = it } != -1) {
-                            fos.write(buf, 0, n)
+                if (!entry.isDirectory) {
+                    candidates.add(name)
+                    // 匹配任何名为 "opencode" 的可执行文件（不在 node_modules 中）
+                    val fileName = name.substringAfterLast('/')
+                    if (fileName == "opencode" && !name.contains("node_modules")) {
+                        FileOutputStream(dest).use { fos ->
+                            val buf = ByteArray(8192)
+                            var n: Int
+                            while (tarIn.read(buf).also { n = it } != -1) {
+                                fos.write(buf, 0, n)
+                            }
                         }
+                        Log.i(TAG, "Extracted opencode ($fileName) from: $name (${dest.length()} bytes)")
+                        return
                     }
-                    Log.i(TAG, "Extracted opencode from deb: ${dest.length()} bytes")
-                    return
                 }
                 entry = tarIn.nextEntry
             }
+            throw IOException("opencode not found in data.tar.xz. Files found: ${candidates.take(20)}")
         }
-        throw IOException("$targetPath not found in data.tar.xz")
     }
 }
