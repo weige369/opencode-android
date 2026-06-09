@@ -48,6 +48,12 @@ object OpenCodeManager {
     private val _serverVersion = MutableStateFlow<String?>(null)
     val serverVersion: StateFlow<String?> = _serverVersion.asStateFlow()
 
+    /**
+     * 是否检测到 opencode 二进制文件
+     * 同步检查，可在 UI 线程调用
+     */
+    val isBinaryAvailable: Boolean by lazy { findOpenCodeBinary() != null }
+
     @Volatile
     private var serverProcess: Process? = null
     private var healthCheckJob: Job? = null

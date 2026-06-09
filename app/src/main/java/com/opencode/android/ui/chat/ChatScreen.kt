@@ -41,6 +41,7 @@ fun ChatScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val serverVersion by viewModel.serverVersion.collectAsStateWithLifecycle()
+    val isMockMode by viewModel.isMockMode.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -61,21 +62,39 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(
-                            text = currentSession?.title?.ifBlank { "OpenCode" } ?: "OpenCode",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        val (statusText, statusColor) = when (runtimeState) {
-                            RuntimeState.RUNNING -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = currentSession?.title?.ifBlank { "OpenCode" } ?: "OpenCode",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            if (isMockMode) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFFFFC107).copy(alpha = 0.2f),
+                                ) {
+                                    Text(
+                                        "MOCK",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF57F17),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                    )
+                                }
+                            }
+                        }
+                        val (statusText, statusColor) = when {
+                            isMockMode -> "◉ Mock 离线模式" to Color(0xFFFFC107)
+                            runtimeState == RuntimeState.RUNNING -> {
                                 val v = serverVersion
                                 if (v != null) "● 运行中 (v$v)" to Color(0xFF4CAF50)
                                 else "● 运行中" to Color(0xFF4CAF50)
                             }
-                            RuntimeState.STARTING -> "◌ 启动中…" to Color(0xFFFFC107)
-                            RuntimeState.STOPPING -> "◌ 停止中…" to Color(0xFFFFC107)
-                            RuntimeState.ERROR -> "✕ 错误" to Color(0xFFFF5252)
-                            RuntimeState.STOPPED -> "○ 已停止" to Color(0xFF9E9E9E)
+                            runtimeState == RuntimeState.STARTING -> "◌ 启动中…" to Color(0xFFFFC107)
+                            runtimeState == RuntimeState.STOPPING -> "◌ 停止中…" to Color(0xFFFFC107)
+                            runtimeState == RuntimeState.ERROR -> "✕ 错误" to Color(0xFFFF5252)
+                            else -> "○ 已停止" to Color(0xFF9E9E9E)
                         }
                         Text(text = statusText, fontSize = 11.sp, color = statusColor)
                     }
@@ -108,7 +127,7 @@ fun ChatScreen(
                         placeholder = { Text("向 OpenCode 提问…") },
                         maxLines = 5,
                         shape = RoundedCornerShape(24.dp),
-                        enabled = currentSession != null && runtimeState == RuntimeState.RUNNING,
+                        enabled = currentSession != null && (runtimeState == RuntimeState.RUNNING || isMockMode),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     if (isLoading) {
@@ -127,7 +146,7 @@ fun ChatScreen(
                                 }
                             },
                             modifier = Modifier.size(48.dp),
-                            enabled = inputText.isNotBlank() && runtimeState == RuntimeState.RUNNING,
+                            enabled = inputText.isNotBlank() && (runtimeState == RuntimeState.RUNNING || isMockMode),
                         ) {
                             Icon(Icons.Filled.Send, contentDescription = "发送")
                         }
@@ -169,7 +188,7 @@ fun ChatScreen(
                         }
                     }
                 }
-            } else if (runtimeState != RuntimeState.RUNNING) {
+            } else if (runtimeState != RuntimeState.RUNNING && !isMockMode) {
                 // 服务未运行 — 显示启动按钮而非无限转圈
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

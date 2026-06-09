@@ -11,14 +11,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import android.util.Log
 
 /**
  * 聊天界面 ViewModel
  *
  * 管理会话、消息发送、AI 回复轮询等。
+ * 当 opencode 二进制未安装时自动进入 Mock 模式，允许体验 UI。
  */
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
+
+    companion object {
+        private const val TAG = "ChatViewModel"
+    }
 
     private val context = application.applicationContext
 
@@ -43,14 +49,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _providers = MutableStateFlow<List<Provider>>(emptyList())
     val providers: StateFlow<List<Provider>> = _providers.asStateFlow()
 
+    /** 当 opencode 未安装时，Mock 模式为 true */
+    private val _isMockMode = MutableStateFlow(!OpenCodeManager.isBinaryAvailable)
+    val isMockMode: StateFlow<Boolean> = _isMockMode.asStateFlow()
+
     private var apiClient: OpenCodeApiClient? = null
+    private var mockIdCounter = 0
 
     val runtimeState = OpenCodeManager.state
     val serverVersion = OpenCodeManager.serverVersion
 
     init {
-        // 自动连接已运行的 server
-        ensureClient()
+        if (_isMockMode.value) {
+            Log.i(TAG, "opencode 二进制未找到，启用 Mock 模式")
+            initMockData()
+        }
     }
 
     private fun ensureClient(): OpenCodeApiClient {
@@ -70,6 +83,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     // ============== 会话管理 ==============
 
     fun loadSessions() {
+        if (_isMockMode.value) return  // mock 模式跳过网络请求
         viewModelScope.launch {
             val client = ensureClient()
             client.listSessions()
@@ -139,6 +153,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sendMessage(text: String, agent: String? = null) {
+        if (_isMockMode.value) {
+            sendMockMessage(text)
+            return
+        }
         val session = _currentSession.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
@@ -197,6 +215,72 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearError() {
         _error.value = null
+    }
+
+    // ============== Mock 模式 ==============
+
+    private fun initMockData() {
+        val mockSession = Session(
+            id = "mock-1",
+            title = "Mock 会话 (离线模式)",
+            time = SessionTime(created = System.currentTimeMillis() / 1000),
+        )
+        _sessions.value = listOf(mockSession)
+        _currentSession.value = mockSession
+        _messages.value = listOf(
+            Message(
+                info = MessageInfo(id = "msg-welcome", role = "assistant", agent = "OpenCode"),
+                parts = listOf(Part(
+                    id = "p1", type = "text",
+                    text = "👋 欢迎使用 OpenCode Android！\n\n" +
+                        "当前为 **Mock 离线模式**，因为未检测到 opencode 二进制文件。\n\n" +
+                        "你可以在此模式下体验 UI 交互，但 AI 功能需要安装 opencode 后才能使用。\n\n" +
+                        "📦 **安装步骤：**\n" +
+                        "1. 安装 [Termux](https://f-droid.org/packages/com.termux/)\n" +
+                        "2. 在 Termux 中安装 opencode-termux deb 包\n" +
+                        "3. 返回本应用，点击「设置 → 启动服务」"
+                )),
+            ),
+        )
+    }
+
+    fun sendMockMessage(text: String) {
+        if (!_isMockMode.value) return
+        val session = _currentSession.value ?: return
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+
+            val userMsg = Message(
+                info = MessageInfo(
+                    id = "mock-u-${++mockIdCounter}",
+                    role = "user",
+                    sessionID = session.id,
+                ),
+                parts = listOf(Part(id = "mp-u-$mockIdCounter", type = "text", text = text)),
+            )
+            _messages.value = _messages.value + userMsg
+
+            delay(800) // 模拟网络延迟
+
+            val reply = Message(
+                info = MessageInfo(
+                    id = "mock-a-${++mockIdCounter}",
+                    role = "assistant",
+                    sessionID = session.id,
+                    agent = "OpenCode (Mock)",
+                ),
+                parts = listOf(Part(
+                    id = "mp-a-$mockIdCounter", type = "text",
+                    text = "这是 Mock 回复。你说：\n> $text\n\n" +
+                        "⚠️ 要使用真正的 AI 功能，请安装 opencode。\n" +
+                        "前往 **设置** 页面查看安装指引。"
+                )),
+            )
+            _messages.value = _messages.value + reply
+            _isLoading.value = false
+        }
     }
 
     override fun onCleared() {
