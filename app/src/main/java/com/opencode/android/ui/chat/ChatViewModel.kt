@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.util.Log
 
 /**
  * 聊天界面 ViewModel
@@ -83,7 +84,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 .onFailure { e ->
-                    _error.value = "Failed to load sessions: ${e.message}"
+                    _error.value = "加载会话失败: ${e.message}"
                 }
         }
     }
@@ -97,7 +98,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     selectSession(session)
                 }
                 .onFailure { e ->
-                    _error.value = "Failed to create session: ${e.message}"
+                    _error.value = "创建会话失败: ${e.message}"
                 }
         }
     }
@@ -121,7 +122,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 .onFailure { e ->
-                    _error.value = "Failed to delete session: ${e.message}"
+                    _error.value = "删除会话失败: ${e.message}"
                 }
         }
     }
@@ -133,7 +134,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val client = ensureClient()
             client.getMessages(sessionId)
                 .onSuccess { msgs -> _messages.value = msgs }
-                .onFailure { e -> _error.value = "Failed to load messages: ${e.message}" }
+                .onFailure { e -> _error.value = "加载消息失败: ${e.message}" }
         }
     }
 
@@ -156,7 +157,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     loadMessages(session.id) // 刷新获取完整响应
                 }
                 .onFailure { e ->
-                    _error.value = "Failed to send message: ${e.message}"
+                    _error.value = "发送消息失败: ${e.message}"
                 }
 
             _isLoading.value = false
@@ -179,7 +180,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val client = ensureClient()
             client.getTodos(sessionId)
                 .onSuccess { todos -> _todos.value = todos }
-                .onFailure { /* silently fail for non-critical feature */ }
+                .onFailure { e -> Log.e("ChatViewModel", "加载 Todo 失败", e) }
         }
     }
 
@@ -190,7 +191,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val client = ensureClient()
             client.getProviders()
                 .onSuccess { providers -> _providers.value = providers }
-                .onFailure { /* silently fail */ }
+                .onFailure { e -> Log.e("ChatViewModel", "加载 Provider 列表失败", e) }
         }
     }
 

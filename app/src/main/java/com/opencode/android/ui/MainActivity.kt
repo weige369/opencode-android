@@ -17,7 +17,6 @@ import com.opencode.android.engine.OpenCodeManager
 import com.opencode.android.service.OpenCodeRuntimeService
 import com.opencode.android.ui.chat.ChatScreen
 import com.opencode.android.ui.theme.OpenCodeTheme
-import com.opencode.android.util.PreferencesManager
 
 /**
  * 主 Activity
@@ -61,13 +60,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 默认启动运行时服务（除非用户在设置中关闭）
-        if (PreferencesManager.isAutoStart(this)) {
-            requestNotificationPermissionAndStart()
-        } else {
-            // 即使 autoStart=false，也启动服务——autoStart 仅控制开机自启
-            requestNotificationPermissionAndStart()
-        }
+        // 默认启动运行时服务
+        requestNotificationPermissionAndStart()
     }
 
     private fun requestNotificationPermissionAndStart() {

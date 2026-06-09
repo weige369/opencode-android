@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * OpenCode 引擎管理器
@@ -38,6 +37,8 @@ object OpenCodeManager {
         ERROR
     }
 
+    private val lock = Any()
+
     private val _state = MutableStateFlow(RuntimeState.STOPPED)
     val state: StateFlow<RuntimeState> = _state.asStateFlow()
 
@@ -47,10 +48,12 @@ object OpenCodeManager {
     private val _serverVersion = MutableStateFlow<String?>(null)
     val serverVersion: StateFlow<String?> = _serverVersion.asStateFlow()
 
+    @Volatile
     private var serverProcess: Process? = null
     private var healthCheckJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val isShuttingDown = AtomicBoolean(false)
+    @Volatile
+    private var isShuttingDown = false
 
     /**
      * 启动 OpenCode Server
@@ -66,63 +69,62 @@ object OpenCodeManager {
         password: String? = null,
         workDir: String? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        if (_state.value == RuntimeState.RUNNING || _state.value == RuntimeState.STARTING) {
-            Log.w(TAG, "OpenCode Server already running or starting")
-            return@withContext Result.success(Unit)
-        }
-
-        _state.value = RuntimeState.STARTING
-        _port.value = port
-        isShuttingDown.set(false)
-
-        try {
-            val binaryPath = findOpenCodeBinary()
-            if (binaryPath == null) {
-                _state.value = RuntimeState.ERROR
-                return@withContext Result.failure(IllegalStateException(
-                    "OpenCode binary not found. Please install opencode first.\n" +
-                    "Recommended: Termux + Hope2333/opencode-termux deb package"
-                ))
+        synchronized(lock) {
+            if (_state.value == RuntimeState.RUNNING || _state.value == RuntimeState.STARTING) {
+                Log.w(TAG, "OpenCode Server already running or starting")
+                return@withContext Result.success(Unit)
             }
 
-            Log.i(TAG, "Starting OpenCode Server: $binaryPath serve --port $port")
+            _state.value = RuntimeState.STARTING
+            _port.value = port
+            isShuttingDown = false
 
-            val processBuilder = ProcessBuilder().apply {
-                val env = environment().apply {
-                    put("PATH", System.getenv("PATH") ?: "/usr/bin:/bin")
-                    put("HOME", System.getenv("HOME") ?: "/root")
-                    // 密码认证（可选）
-                    if (!password.isNullOrBlank()) {
-                        put("OPENCODE_SERVER_PASSWORD", password)
+            try {
+                val binaryPath = findOpenCodeBinary()
+                if (binaryPath == null) {
+                    _state.value = RuntimeState.ERROR
+                    return@withContext Result.failure(IllegalStateException(
+                        "OpenCode binary not found. Please install opencode first.\n" +
+                        "Recommended: Termux + Hope2333/opencode-termux deb package"
+                    ))
+                }
+
+                Log.i(TAG, "Starting OpenCode Server: $binaryPath serve --port $port")
+
+                val processBuilder = ProcessBuilder().apply {
+                    val env = environment().apply {
+                        put("PATH", System.getenv("PATH") ?: "/usr/bin:/bin")
+                        put("HOME", System.getenv("HOME") ?: "/root")
+                        if (!password.isNullOrBlank()) {
+                            put("OPENCODE_SERVER_PASSWORD", password)
+                        }
                     }
+
+                    command(
+                        binaryPath,
+                        "serve",
+                        "--port", port.toString(),
+                        "--cors", "http://localhost"
+                    )
+
+                    if (!workDir.isNullOrBlank()) {
+                        directory(java.io.File(workDir))
+                    }
+
+                    redirectErrorStream(true)
                 }
 
-                command(
-                    binaryPath,
-                    "serve",
-                    "--port", port.toString(),
-                    "--cors", "http://localhost"
-                )
+                serverProcess = processBuilder.start()
+                startHealthCheck(port)
 
-                if (!workDir.isNullOrBlank()) {
-                    directory(java.io.File(workDir))
-                }
+                Log.i(TAG, "OpenCode Server process started, PID: ${getPid()}")
+                Result.success(Unit)
 
-                redirectErrorStream(true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start OpenCode Server", e)
+                _state.value = RuntimeState.ERROR
+                Result.failure(e)
             }
-
-            serverProcess = processBuilder.start()
-
-            // 启动健康检查
-            startHealthCheck(port)
-
-            Log.i(TAG, "OpenCode Server process started, PID: ${getPid()}")
-            Result.success(Unit)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start OpenCode Server", e)
-            _state.value = RuntimeState.ERROR
-            Result.failure(e)
         }
     }
 
@@ -130,41 +132,41 @@ object OpenCodeManager {
      * 停止 OpenCode Server
      */
     suspend fun stop() = withContext(Dispatchers.IO) {
-        if (_state.value == RuntimeState.STOPPED) {
-            return@withContext
-        }
-
-        _state.value = RuntimeState.STOPPING
-        isShuttingDown.set(true)
-
-        try {
-            // 取消健康检查
-            healthCheckJob?.cancel()
-
-            // 优雅关闭
-            val process = serverProcess
-            if (process != null && process.isAlive) {
-                process.destroy()
-                // 等待最多 5 秒
-                val exited = try {
-                    process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-                } catch (_: Exception) { false }
-
-                if (!exited) {
-                    Log.w(TAG, "OpenCode Server did not exit gracefully, force killing")
-                    process.destroyForcibly()
-                }
+        synchronized(lock) {
+            if (_state.value == RuntimeState.STOPPED) {
+                return@withContext
             }
 
-            serverProcess = null
-            _state.value = RuntimeState.STOPPED
-            _serverVersion.value = null
-            Log.i(TAG, "OpenCode Server stopped")
+            _state.value = RuntimeState.STOPPING
+            isShuttingDown = true
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping OpenCode Server", e)
-            serverProcess = null
-            _state.value = RuntimeState.STOPPED
+            try {
+                healthCheckJob?.cancel()
+                healthCheckJob = null
+
+                val process = serverProcess
+                if (process != null && process.isAlive) {
+                    process.destroy()
+                    val exited = try {
+                        process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+                    } catch (_: Exception) { false }
+
+                    if (!exited) {
+                        Log.w(TAG, "OpenCode Server did not exit gracefully, force killing")
+                        process.destroyForcibly()
+                    }
+                }
+
+                serverProcess = null
+                _state.value = RuntimeState.STOPPED
+                _serverVersion.value = null
+                Log.i(TAG, "OpenCode Server stopped")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping OpenCode Server", e)
+                serverProcess = null
+                _state.value = RuntimeState.STOPPED
+            }
         }
     }
 
@@ -177,7 +179,8 @@ object OpenCodeManager {
             val pidField = Process::class.java.getDeclaredField("pid")
             pidField.isAccessible = true
             pidField.getLong(process)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to get PID", e)
             -1
         }
     }
@@ -217,7 +220,8 @@ object OpenCodeManager {
             proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
             reader.close()
             if (!result.isNullOrBlank() && java.io.File(result).exists()) result else null
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "which opencode failed", e)
             null
         }
     }
@@ -235,7 +239,7 @@ object OpenCodeManager {
 
             var retries = 0
             while (isActive && retries < HEALTH_CHECK_MAX_RETRIES) {
-                if (isShuttingDown.get()) break
+                if (isShuttingDown) break
 
                 delay(HEALTH_CHECK_INTERVAL_MS)
 
@@ -274,7 +278,7 @@ object OpenCodeManager {
                 retries++
             }
 
-            if (!isShuttingDown.get() && _state.value != RuntimeState.RUNNING) {
+            if (!isShuttingDown && _state.value != RuntimeState.RUNNING) {
                 Log.e(TAG, "OpenCode Server failed to become healthy after $retries retries")
                 _state.value = RuntimeState.ERROR
             }
