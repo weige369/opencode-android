@@ -17,6 +17,7 @@ import com.opencode.android.engine.OpenCodeManager
 import com.opencode.android.service.OpenCodeRuntimeService
 import com.opencode.android.ui.chat.ChatScreen
 import com.opencode.android.ui.theme.OpenCodeTheme
+import com.opencode.android.util.PreferencesManager
 
 /**
  * 主 Activity
