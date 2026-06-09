@@ -17,7 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import com.opencode.android.engine.NodeRuntime
+import com.opencode.android.engine.OpenCodeInstaller
 import com.opencode.android.engine.OpenCodeManager
 import com.opencode.android.service.OpenCodeRuntimeService
 import com.opencode.android.ui.chat.ChatScreen
@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     // 判断是否需要安装
                     val needsSetup = remember {
-                        !NodeRuntime.isOpenCodeReady(this@MainActivity) &&
+                        !OpenCodeInstaller.isInstalled(this@MainActivity) &&
                         !OpenCodeManager.isBinaryAvailable
                     }
 

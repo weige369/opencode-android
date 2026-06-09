@@ -5,8 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.opencode.android.bridge.OpenCodeApiClient
 import com.opencode.android.data.model.*
+import com.opencode.android.engine.OpenCodeInstaller
 import com.opencode.android.engine.OpenCodeManager
-import com.opencode.android.engine.NodeRuntime
 import com.opencode.android.util.PreferencesManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +52,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 当 opencode 未安装时，Mock 模式为 true */
     private val _isMockMode = MutableStateFlow(
-        !OpenCodeManager.isBinaryAvailable && !NodeRuntime.isOpenCodeReady(context)
+        !OpenCodeManager.isBinaryAvailable && !OpenCodeInstaller.isInstalled(context)
     )
     val isMockMode: StateFlow<Boolean> = _isMockMode.asStateFlow()
 

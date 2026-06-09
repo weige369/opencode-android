@@ -203,9 +203,8 @@ object OpenCodeManager {
      */
     private fun findOpenCodeBinary(): String? {
         val candidates = listOf(
-            // 内置 Node.js 安装的 opencode (最高优先级)
-            "/data/data/com.opencode.android/files/node/bin/opencode",
-            "/data/data/com.opencode.android/files/node/lib/node_modules/@anthropic-ai/opencode/dist/cli.mjs",
+            // OpenCodeInstaller 安装的二进制 (最高优先级)
+            "/data/data/com.opencode.android/files/bin/opencode",
             // Termux
             "/data/data/com.termux/files/usr/bin/opencode",
             "/data/data/com.termux/files/usr/glibc/bin/opencode",
