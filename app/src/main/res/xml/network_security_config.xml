@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 允许与 OpenCode Server 本地通信的明文 HTTP -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+    <!-- 其余流量遵循系统默认（禁止明文） -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
